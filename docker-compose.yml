@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: lgu-payroll-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lgu_payroll
+    ports:
+      - "5441:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lgu-payroll-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/lgu_payroll
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      CONFIG_ENCRYPTION_KEY: ${CONFIG_ENCRYPTION_KEY:-}
+      NODE_ENV: development
+      PORT: 4101
+      WEB_ORIGIN: http://localhost:5175
+      TRUST_PROXY: "1"
+    ports:
+      - "4101:4101"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lgu-payroll-frontend
+    environment:
+      VITE_API_BASE: http://localhost:4101/api/v1
+    ports:
+      - "5176:5176"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:

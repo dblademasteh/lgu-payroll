@@ -1,0 +1,354 @@
+// LGU Payroll — Prisma schema.
+// Conventions mirror LGU-HRMS/LGU-Attendance: uuid ids, Timestamptz(6), soft delete via
+// deletedAt, Decimal(12,2) money, dates stored UTC, statuses as enums.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PayrollStatus {
+  DRAFT
+  PROCESSING
+  APPROVED
+  COMPLETED
+  CANCELLED
+}
+
+enum PayslipStatus {
+  PENDING
+  GENERATED
+  DISTRIBUTED
+  CANCELLED
+}
+
+enum DeductionType {
+  GOVERNMENT
+  TAX
+  LOAN
+  OTHER
+}
+
+enum DeductionAmountType {
+  FIXED
+  PERCENTAGE
+  TABLE
+}
+
+enum DeductionBasis {
+  GROSS
+  TAXABLE
+  NET
+}
+
+enum Role {
+  ADMIN
+  HR_MANAGER
+  PAYROLL_MANAGER
+  DEPARTMENT_HEAD
+  AUDITOR
+  VIEWER
+}
+
+enum LeaveType {
+  VACATION
+  SICK
+  EMERGENCY
+  MATERNITY
+  PATERNITY
+  SOLO_PARENT
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model User {
+  id                    String     @id @default(uuid())
+  username              String     @unique
+  passwordHash          String
+  fullName              String
+  role                  Role       @default(VIEWER)
+  status                String     @default("ACTIVE")
+  externalId            String?    @unique
+  createdAt             DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
+  auditLogs             AuditLog[]
+  notificationPreference NotificationPreference? @relation("UserNotificationPreference")
+}
+
+model Employee {
+  id             String           @id @default(uuid())
+  hrmsId         String?
+  employeeNumber String           @unique
+  firstName      String
+  lastName       String
+  middleName     String?
+  email          String?
+  department     String?
+  position       String?
+  status         EmploymentStatus @default(ACTIVE)
+  hiredDate      DateTime?        @db.Date
+  monthlySalary  Decimal          @default(0) @db.Decimal(12, 2)
+  syncSource     String           @default("MANUAL")
+  lastSyncedAt   DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?        @db.Timestamptz(6)
+
+  payrollRecords   PayrollRecord[]
+  payslips         Payslip[]
+  leaveRequests    LeaveRequest[]
+  headedDepartments Department[] @relation("DepartmentHead")
+  departments      Department[]   @relation("DepartmentEmployees")
+
+  @@index([status])
+  @@index([department])
+  @@index([hrmsId])
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  headId      String?
+  head        Employee? @relation("DepartmentHead", fields: [headId], references: [id])
+  budget      Decimal  @default(0) @db.Decimal(12, 2)
+  description String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  employees Employee[] @relation("DepartmentEmployees")
+
+  @@index([code])
+}
+
+model PayrollRun {
+  id              String        @id @default(uuid())
+  period          String        @unique // e.g., "2025-01"
+  name            String
+  status          PayrollStatus @default(DRAFT)
+  totalEmployees  Int           @default(0)
+  totalGrossPay   Decimal       @default(0) @db.Decimal(12, 2)
+  totalDeductions Decimal       @default(0) @db.Decimal(12, 2)
+  totalNetPay     Decimal       @default(0) @db.Decimal(12, 2)
+  processedAt     DateTime?     @db.Timestamptz(6)
+  approvedBy      String?
+  approvedAt      DateTime?     @db.Timestamptz(6)
+  remarks         String?
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+
+  records PayrollRecord[]
+  payslips Payslip[]
+
+  @@index([status])
+  @@index([period])
+}
+
+model PayrollRecord {
+  id              String   @id @default(uuid())
+  payrollRunId    String
+  employeeId      String
+  basicSalary     Decimal  @db.Decimal(12, 2)
+  overtimePay     Decimal  @default(0) @db.Decimal(12, 2)
+  allowances      Decimal  @default(0) @db.Decimal(12, 2)
+  grossPay        Decimal  @db.Decimal(12, 2)
+  totalDeductions Decimal  @default(0) @db.Decimal(12, 2)
+  taxableIncome   Decimal  @db.Decimal(12, 2)
+  withholdingTax  Decimal  @default(0) @db.Decimal(12, 2)
+  netPay          Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  payrollRun PayrollRun   @relation(fields: [payrollRunId], references: [id])
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+  details    PayrollDetail[]
+  payslips   Payslip[]    @relation("PayrollRecordPayslips")
+
+  @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+}
+
+model PayrollDetail {
+  id             String           @id @default(uuid())
+  payrollRecordId String
+  deductionId    String?
+  type           DeductionType
+  name           String
+  amountType     DeductionAmountType
+  basis          DeductionBasis
+  rateOrAmount   Decimal          @db.Decimal(12, 4)
+  computedAmount Decimal          @db.Decimal(12, 2)
+  isMandatory    Boolean          @default(false)
+  remarks        String?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+
+  payrollRecord PayrollRecord @relation(fields: [payrollRecordId], references: [id])
+  deduction     Deduction?    @relation(fields: [deductionId], references: [id])
+
+  @@index([payrollRecordId])
+}
+
+model Deduction {
+  id           String               @id @default(uuid())
+  name         String
+  code         String               @unique
+  type         DeductionType
+  amountType   DeductionAmountType
+  basis        DeductionBasis
+  rateOrAmount Decimal              @db.Decimal(12, 4) // percentage (0.045) or fixed amount
+  isMandatory  Boolean              @default(false)
+  isActive     Boolean              @default(true)
+  description  String?
+  createdAt    DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(6)
+
+  details PayrollDetail[]
+}
+
+model Payslip {
+  id              String         @id @default(uuid())
+  payrollRunId    String
+  employeeId      String
+  payrollRecordId String
+  status          PayslipStatus  @default(PENDING)
+  generatedAt     DateTime?      @db.Timestamptz(6)
+  distributedAt   DateTime?      @db.Timestamptz(6)
+  pdfPath         String?
+  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
+
+  payrollRun    PayrollRun     @relation(fields: [payrollRunId], references: [id])
+  employee      Employee       @relation(fields: [employeeId], references: [id])
+  payrollRecord PayrollRecord  @relation("PayrollRecordPayslips", fields: [payrollRecordId], references: [id])
+
+  @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+  @@index([status])
+}
+
+model LeaveRequest {
+  id         String      @id @default(uuid())
+  employeeId String
+  hrmsId     String?     @unique
+  type       LeaveType   @default(VACATION)
+  startDate  DateTime    @db.Date
+  endDate    DateTime    @db.Date
+  days       Float
+  status     LeaveStatus @default(PENDING)
+  reason     String?
+  approvedBy String?
+  approvedAt DateTime?   @db.Timestamptz(6)
+  createdAt  DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime    @updatedAt @db.Timestamptz(6)
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, status])
+  @@index([startDate, endDate])
+}
+
+model Holiday {
+  id   String   @id @default(uuid())
+  date DateTime @unique @db.Date
+  name String
+}
+
+model SyncLog {
+  id              String   @id @default(uuid())
+  source          String   @default("POLL")
+  direction       String   @default("PULL")
+  event           String?
+  status          String   @default("SUCCESS")
+  processed       Int      @default(0)
+  message         String?
+  payload         Json?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  idempotencyKey  String?  @unique @db.VarChar(128)
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([direction, createdAt])
+}
+
+model IntegrationConfig {
+  id                   String   @id @default("default")
+  hrmsBaseUrl          String?
+  hrmsApiKeyEnc        String?
+  hrmsWebhookSecretEnc String?
+  pollerEnabled        Boolean  @default(false)
+  intervalMin          Int      @default(15)
+  timeoutMs            Int      @default(15000)
+  ingestPath           String   @default("/integrations/attendance")
+  forwardingEnabled    Boolean  @default(false)
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  ip        String?
+  error     Boolean  @default(false)
+  timestamp DateTime @default(now()) @db.Timestamptz(6)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([timestamp])
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  name       String
+  prefix     String
+  keyHash    String    @unique
+  scopes     String[]
+  active     Boolean   @default(true)
+  lastUsedAt DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+}
+
+model NotificationPreference {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  inApp     Boolean  @default(true)
+  email     Boolean  @default(false)
+  payroll   Boolean  @default(true)
+  deductions Boolean @default(true)
+  reports   Boolean  @default(true)
+  system    Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation("UserNotificationPreference", fields: [userId], references: [id])
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  userId    String?  // null = global settings
+  key       String
+  value     Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, key])
+}
