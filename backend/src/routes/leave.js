@@ -2,7 +2,7 @@ import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { validate, validateQuery } from '../middleware/validate.js';
+import { validate } from '../middleware/validate.js';
 import { leaveCreateSchema, leaveUpdateSchema, leaveParamsSchema, leaveQuerySchema, holidayCreateSchema, holidayParamsSchema } from '../shared/contracts/leaveRequests.js';
 import { AppError } from '../lib/errors.js';
 
@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-router.get('/', validateQuery(leaveQuerySchema), async (req, res, next) => {
+router.get('/', validate(leaveQuerySchema), async (req, res, next) => {
   try {
     const { employeeId, status, startDate, endDate, page, limit } = req.query;
     const where = {};

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Moon, Sun, ChevronDown, LogOut, Landmark, Clock, Bell, CircleAlert, CheckCircle2, Info, Loader2, CheckCheck, Trash2 } from 'lucide-react';
+import { Menu, Moon, Sun, ChevronDown, LogOut, Landmark, Clock } from 'lucide-react';
 import { useAuth } from '../stores/auth.js';
 import { useTheme, toggleTheme } from '../theme.js';
-import { useToast } from '../hooks/useToast.jsx';
 
 const TITLES = {
   '/dashboard': 'Dashboard',
@@ -14,13 +13,6 @@ const TITLES = {
   '/departments': 'Departments',
   '/reports': 'Reports',
   '/settings': 'Settings',
-};
-
-const TONE_STYLES = {
-  error: { icon: CircleAlert, cls: 'bg-error/10 text-error' },
-  warn: { icon: CircleAlert, cls: 'bg-warning/10 text-warning' },
-  success: { icon: CheckCircle2, cls: 'bg-success/10 text-success' },
-  info: { icon: Info, cls: 'bg-accent/10 text-accent' },
 };
 
 function manilaParts(now) {
@@ -36,12 +28,7 @@ export default function Header({ onToggleSidebar }) {
   const [now, setNow] = useState(() => new Date());
   const theme = useTheme();
   const [userOpen, setUserOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
   const userRef = useRef(null);
-  const notifRef = useRef(null);
-  const { items, loading, markRead, markAllRead, dismissAll } = { items: [], loading: false, markRead: () => {}, markAllRead: () => {}, dismissAll: () => {} };
-  const toast = useToast();
-  const unread = items.filter((n) => n.unread).length;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -49,14 +36,13 @@ export default function Header({ onToggleSidebar }) {
   }, []);
 
   useEffect(() => {
-    if (!userOpen && !notifOpen) return undefined;
+    if (!userOpen) return undefined;
     const onDown = (e) => {
       if (userRef.current && !userRef.current.contains(e.target)) setUserOpen(false);
-      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [userOpen, notifOpen]);
+  }, [userOpen]);
 
   const title = TITLES[location.pathname] ?? 'LGU Payroll';
   const { date, time } = manilaParts(now);
@@ -95,55 +81,6 @@ export default function Header({ onToggleSidebar }) {
         </div>
 
         <div className="flex items-center gap-1 md:gap-2">
-          <div className="dropdown" ref={notifRef}>
-            <button
-              type="button"
-              onClick={() => setNotifOpen((o) => !o)}
-              className="btn btn-ghost px-2 md:px-3 relative"
-              aria-label={`Notifications${unread ? ` (${unread} unread)` : ''}`}
-              aria-expanded={notifOpen}
-              title="Notifications"
-            >
-              <Bell size={18} aria-hidden="true" />
-              {unread > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-error text-error-ink text-[10px] font-bold grid place-items-center ring-2 ring-surface">
-                  {unread > 9 ? '9+' : unread}
-                </span>
-              )}
-            </button>
-            {notifOpen && (
-              <div className="dropdown-panel w-[360px] max-w-[calc(100vw-2rem)] p-0 shadow-lg" role="menu" aria-label="Notifications">
-                <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-line">
-                  <p className="font-display font-semibold text-ink text-sm">Notifications</p>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      className="btn btn-ghost px-2 py-1 text-xs"
-                      onClick={() => { markAllRead(); toast('All notifications marked as read', 'success'); }}
-                      title="Mark all as read"
-                      aria-label="Mark all as read"
-                    >
-                      <CheckCheck size={14} aria-hidden="true" /> Read
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost px-2 py-1 text-xs"
-                      onClick={() => { dismissAll(); toast('Notifications cleared', 'success'); }}
-                      title="Clear all notifications"
-                      aria-label="Clear all notifications"
-                    >
-                      <Trash2 size={14} aria-hidden="true" /> Clear
-                    </button>
-                  </div>
-                </div>
-                <div className="px-4 py-8 text-center">
-                  <p className="text-sm font-medium text-ink">No notifications</p>
-                  <p className="text-xs text-muted mt-1">You're all caught up.</p>
-                </div>
-              </div>
-            )}
-          </div>
-
           <button
             type="button"
             onClick={toggleTheme}

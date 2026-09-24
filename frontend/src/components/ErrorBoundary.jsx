@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useToast } from '../hooks/useToast.jsx';
 
 export default function ErrorBoundary({ children }) {
-  const navigate = useNavigate();
   const toast = useToast();
   const [hasError, setHasError] = useState(false);
 
@@ -23,7 +21,7 @@ export default function ErrorBoundary({ children }) {
 
   if (hasError) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex min-h-[55vh] items-center justify-center">
         <div className="card p-8 text-center max-w-md">
           <p className="text-lg font-semibold text-ink">Something went wrong</p>
           <p className="text-sm text-muted mt-2">Please refresh the page to continue.</p>

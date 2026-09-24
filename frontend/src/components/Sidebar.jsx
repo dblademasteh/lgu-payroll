@@ -1,11 +1,14 @@
+import { useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Landmark, LayoutDashboard, DollarSign, Users, FileText, Settings as SettingsIcon, Calculator, Receipt, Building2 } from 'lucide-react';
+import { Landmark, LayoutDashboard, DollarSign, Users, FileText, Settings as SettingsIcon, Calculator, Receipt, Building2, CalendarDays } from 'lucide-react';
 import { useAuth } from '../stores/auth.js';
 import { OVERSIGHT_ROLES, PAYROLL_ROLES, REPORT_ROLES } from '../lib/roles.js';
 
-/* Sidebar mirrors lgu-hrms DESIGN.md (classic group sidebar): brand tile,
-   mono-labeled groups, accent-tinted active links, collapsible w-64 ↔ w-[72px].
-   On <md screens it becomes a slide-in drawer with a backdrop (hamburger toggle). */
+/* Sidebar mirrors lgu-hrms DESIGN.md (classic group sidebar) — same pattern as
+   the LGU-Attendance suite: bg-ink brand tile, mono-labeled groups, accent-tinted
+   active links, collapsible w-[260px] ↔ w-[72px]. On <md screens it becomes a
+   slide-in drawer with a backdrop; the drawer traps focus, closes on Escape, and
+   locks body scroll while open. */
 const GROUPS = [
   {
     label: 'Payroll',
@@ -21,6 +24,7 @@ const GROUPS = [
     items: [
       { to: '/employees', label: 'Employees', icon: Users, roles: OVERSIGHT_ROLES },
       { to: '/departments', label: 'Departments', icon: Building2, roles: OVERSIGHT_ROLES },
+      { to: '/leave', label: 'Leave Management', icon: CalendarDays, roles: [...OVERSIGHT_ROLES, 'VIEWER'] },
     ],
   },
   {
@@ -44,7 +48,7 @@ function Brand({ expanded }) {
       {expanded && (
         <div className="min-w-0">
           <p className="font-display font-bold text-ink leading-tight truncate">LGU Payroll</p>
-          <p className="mono-label text-[10px]">Management & Reporting</p>
+          <p className="mono-label text-[10px]">Management &amp; Reporting</p>
         </div>
       )}
     </div>
@@ -69,6 +73,7 @@ function Nav({ expanded, onNavigate }) {
                   key={to}
                   to={to}
                   title={label}
+                  aria-label={label}
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2.5 rounded-[10px] transition-colors
@@ -91,40 +96,90 @@ function Nav({ expanded, onNavigate }) {
 
 function Footer({ expanded }) {
   return (
-    <div className={`border-t border-line p-3 ${expanded ? 'flex justify-center' : ''}`}>
-      <p className="mono-label text-[10px] text-center">On-prem · RA 10173 · v1.0</p>
+    <div className="border-t border-line p-3 flex justify-center">
+      {expanded && (
+        <p className="mono-label text-[10px] text-center">On-prem · RA 10173 · v1.0</p>
+      )}
     </div>
   );
 }
 
 export default function Sidebar({ collapsed, mobileOpen, onMobileClose }) {
   const expanded = !collapsed;
+  const drawerRef = useRef(null);
+
+  // Focus trap + Escape-to-close + body scroll lock while the mobile drawer is open.
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+    const drawer = drawerRef.current;
+    if (!drawer) return undefined;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const prevFocus = document.activeElement;
+
+    const focusables = () =>
+      [...drawer.querySelectorAll('a[href], button:not([disabled])')].filter((el) => el.offsetParent !== null);
+    const first = () => focusables()[0];
+    const last = () => focusables()[focusables().length - 1];
+
+    first()?.focus();
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onMobileClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const list = focusables();
+      if (list.length === 0) return;
+      if (e.shiftKey && document.activeElement === first()) {
+        e.preventDefault();
+        last().focus();
+      } else if (!e.shiftKey && document.activeElement === last()) {
+        e.preventDefault();
+        first().focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      if (prevFocus instanceof HTMLElement) prevFocus.focus();
+    };
+  }, [mobileOpen, onMobileClose]);
+
   const drawerContent = () => (
     <>
-      <Brand expanded />
-      <Nav expanded onNavigate={onMobileClose} />
-      <Footer expanded />
+      <Brand expanded={expanded} />
+      <Nav expanded={expanded} onNavigate={onMobileClose} />
+      <Footer expanded={expanded} />
     </>
   );
 
   return (
     <>
       {/* Desktop rail — hidden below md */}
-      <aside className={`bg-surface border-r border-line hidden md:flex flex-col shrink-0 transition-[width] duration-200 ${collapsed ? 'w-[72px]' : 'w-[260px]'}`}>
+      <aside className={`bg-surface border-r border-line hidden md:flex flex-col shrink-0 transition-[width] duration-200 ${collapsed ? 'w-[72px]' : 'w-[260px]'}`} aria-label="Sidebar">
         {drawerContent()}
       </aside>
 
-      {/* Mobile drawer — below md, fixed overlay */}
+      {/* Mobile drawer — below md, focus-trapped slide-in */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
           <button
             type="button"
-            className="absolute inset-0 bg-ink/50 backdrop-blur-sm cursor-default"
+            className="drawer-backdrop absolute inset-0 bg-ink/50 backdrop-blur-sm cursor-default"
             onClick={onMobileClose}
             aria-label="Close navigation"
             tabIndex={-1}
           />
-          <aside className="absolute inset-y-0 left-0 w-[260px] bg-surface border-r border-line flex flex-col shadow-lg">
+          <aside
+            ref={drawerRef}
+            className="drawer-panel absolute inset-y-0 left-0 w-[260px] max-w-[calc(100vw-2rem)] bg-surface border-r border-line flex flex-col shadow-lg"
+          >
             {drawerContent()}
           </aside>
         </div>

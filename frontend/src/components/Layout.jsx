@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar.jsx';
 import Header from './Header.jsx';
@@ -7,12 +7,19 @@ import ErrorBoundary from './ErrorBoundary.jsx';
 const COLLAPSE_KEY = 'lgu-payroll-sidebar-collapsed';
 const MD_QUERY = '(min-width: 768px)';
 
-export default function Layout({ maxWidth = 'max-w-6xl' }) {
+/* Data-dense routes inherit a wider canvas; the rest stay at the 6xl baseline. */
+const ROUTE_WIDTHS = {
+  '/dashboard': 'max-w-7xl',
+  '/reports': 'max-w-7xl',
+};
+
+export default function Layout({ maxWidth }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === 'true'; } catch { return false; }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const widthClass = ROUTE_WIDTHS[location.pathname] ?? maxWidth ?? 'max-w-6xl';
 
   useEffect(() => {
     try { localStorage.setItem(COLLAPSE_KEY, String(collapsed)); } catch { /* ignore */ }
@@ -42,13 +49,15 @@ export default function Layout({ maxWidth = 'max-w-6xl' }) {
     }
   };
 
+  const handleMobileClose = useCallback(() => setMobileOpen(false), []);
+
   return (
     <div className="h-screen flex bg-bg">
-      <Sidebar collapsed={collapsed} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <Sidebar collapsed={collapsed} mobileOpen={mobileOpen} onMobileClose={handleMobileClose} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header onToggleSidebar={handleToggleSidebar} />
-        <main className="flex-1 overflow-auto p-3 sm:p-6 flex items-start justify-center">
-          <div className={`w-full ${maxWidth}`}>
+        <main className="flex-1 overflow-auto px-4 py-3 md:px-6 md:py-6 flex items-start justify-center">
+          <div className={`w-full ${widthClass}`}>
             <ErrorBoundary>
               <Outlet />
             </ErrorBoundary>

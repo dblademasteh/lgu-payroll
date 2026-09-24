@@ -7,12 +7,14 @@ import '@fontsource-variable/sora';
 import '@fontsource-variable/jetbrains-mono';
 
 // Apply saved theme on load
-const savedTheme = localStorage.getItem('lgu-payroll-theme');
-if (savedTheme) {
-  document.documentElement.dataset.theme = savedTheme;
-} else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-  document.documentElement.dataset.theme = 'dark';
-}
+try {
+  const savedTheme = localStorage.getItem('lgu-payroll-theme');
+  if (savedTheme) {
+    document.documentElement.dataset.theme = savedTheme;
+  } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.dataset.theme = 'dark';
+  }
+} catch { /* storage disabled */ }
 
 // Apply saved scales
 try {

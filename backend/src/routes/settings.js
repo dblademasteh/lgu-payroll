@@ -2,7 +2,7 @@ import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { validate, validateQuery } from '../middleware/validate.js';
+import { validate } from '../middleware/validate.js';
 import { settingsSchema, integrationConfigSchema, integrationConfigParamsSchema } from '../shared/contracts/settings.js';
 import { encrypt, decrypt } from '../lib/secrets.js';
 import { AppError } from '../lib/errors.js';

@@ -11,6 +11,7 @@ import Employees from './pages/Employees.jsx';
 import Departments from './pages/Departments.jsx';
 import Reports from './pages/Reports.jsx';
 import Settings from './pages/Settings.jsx';
+import Leave from './pages/Leave.jsx';
 import NotFound from './components/NotFound.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 
@@ -32,8 +33,8 @@ function Protected({ children, roles }) {
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <BrowserRouter>
+    <BrowserRouter>
+      <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Login />} />
           <Route element={<Layout />}>
@@ -44,11 +45,12 @@ export default function App() {
             <Route path="/employees" element={<Protected roles={OVERSIGHT_ROLES}><Employees /></Protected>} />
             <Route path="/departments" element={<Protected roles={OVERSIGHT_ROLES}><Departments /></Protected>} />
             <Route path="/reports" element={<Protected roles={REPORT_ROLES}><Reports /></Protected>} />
+            <Route path="/leave" element={<Protected roles={[...OVERSIGHT_ROLES, 'VIEWER']}><Leave /></Protected>} />
             <Route path="/settings" element={<Protected><Settings /></Protected>} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </BrowserRouter>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </BrowserRouter>
   );
 }

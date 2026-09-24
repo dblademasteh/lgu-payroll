@@ -16,17 +16,17 @@ export async function auditMiddleware(req, res, next) {
   };
 
   const before = req.body ? redact({ ...req.body }) : null;
-  const userId = req.user?.id ?? req.apiKey?.id ?? null;
   const ip = req.ip;
 
   res.on('finish', async () => {
     try {
+      const userId = req.user?.id ?? req.apiKey?.id ?? null;
       const after = responseBody ? redact(responseBody) : null;
       await prisma.auditLog.create({
         data: {
           userId,
-          action: `${req.method} ${req.route?.path ?? req.path}`,
-          entity: req.route?.path?.split('/')[2] ?? 'unknown',
+          action: `${req.method} ${req.originalUrl}`,
+          entity: req.baseUrl.split('/').filter(Boolean).join('/') || 'root',
           entityId: req.params.id ?? 'bulk',
           before,
           after,

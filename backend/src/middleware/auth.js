@@ -5,15 +5,23 @@ import { AppError } from '../lib/errors.js';
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET must be set');
 
-const ACCESS_TTL = '15m';
-const REFRESH_TTL = '7d';
+const ACCESS_TTL_INT = 15 * 60; // 15m
+const REFRESH_TTL_INT = 7 * 24 * 60 * 60; // 7d
 
-export function signAccessToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TTL });
+export function signAccessToken(user) {
+  return jwt.sign(
+    { sub: user.id, username: user.username, role: user.role, tver: user.tokenVersion ?? 0 },
+    JWT_SECRET,
+    { expiresIn: ACCESS_TTL_INT }
+  );
 }
 
-export function signRefreshToken(payload) {
-  return jwt.sign({ ...payload, typ: 'refresh' }, JWT_SECRET, { expiresIn: REFRESH_TTL });
+export function signRefreshToken(user) {
+  return jwt.sign(
+    { sub: user.id, username: user.username, role: user.role, typ: 'refresh', tver: user.tokenVersion ?? 0 },
+    JWT_SECRET,
+    { expiresIn: REFRESH_TTL_INT }
+  );
 }
 
 export function verifyAccessToken(token) {
@@ -44,6 +52,9 @@ export async function requireAuth(req, res, next) {
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user || user.status !== 'ACTIVE') {
     throw new AppError('User not found or inactive', 401, 'UNAUTHORIZED');
+  }
+  if (user.tokenVersion !== (payload.tver ?? 0)) {
+    throw new AppError('Session invalidated — please sign in again', 401, 'SESSION_REVOKED');
   }
   req.user = { id: user.id, username: user.username, fullName: user.fullName, role: user.role, externalId: user.externalId };
   next();

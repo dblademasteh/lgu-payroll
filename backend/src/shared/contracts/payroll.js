@@ -29,6 +29,12 @@ export const payrollRunQuerySchema = z.object({
   }),
 });
 
+export const payrollChangesSchema = z.object({
+  body: z.object({
+    since: z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid since timestamp').optional(),
+  }),
+});
+
 export const deductionCreateSchema = z.object({
   body: z.object({
     name: z.string().min(1).max(100),

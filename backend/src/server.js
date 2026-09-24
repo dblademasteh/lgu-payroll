@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import routes from './routes/index.js';
 import { apiLimiter } from './middleware/rateLimit.js';
+import { auditMiddleware } from './middleware/audit.js';
 import { prisma } from './lib/prisma.js';
 import { AppError } from './lib/errors.js';
 
@@ -27,19 +28,32 @@ app.use(express.json({
   },
 }));
 app.use('/api/', apiLimiter);
+app.use('/api/v1', auditMiddleware);
 
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => { console.log('req', req.path); next(); });
 }
 
+function isDbUnavailable(err) {
+  const codes = ['P1001', 'P1002', 'P1017'];
+  if (codes.includes(err?.code)) return true;
+  const msg = String(err?.message || '');
+  return /ECONNREFUSED|ETIMEDOUT|Connection terminated|Can't reach database server|database system is (starting up|shutting down)/i.test(msg);
+}
+
 app.get('/api/v1/health', (req, res) => {
-  res.json({ status: 'ok', service: 'lgu-payroll-backend' });
+  prisma.$queryRaw`SELECT 1`
+    .then(() => res.json({ status: 'ok', service: 'lgu-payroll-backend', database: 'up' }))
+    .catch(() => res.status(503).json({ status: 'degraded', service: 'lgu-payroll-backend', database: 'down' }));
 });
 
 app.use('/api/v1', routes);
 
 function normalizePrismaError(err) {
   if (err instanceof AppError) return err;
+  if (isDbUnavailable(err)) {
+    return new AppError('Database is unavailable. Please try again shortly.', 503, 'DB_UNAVAILABLE');
+  }
   const code = err?.code;
   if (typeof code === 'string' && /^P2\d{3}$/.test(code)) {
     switch (code) {
@@ -57,7 +71,8 @@ app.use((err, req, res, next) => {
   const normalized = normalizePrismaError(err);
   const status = normalized.status || 500;
   const code = normalized.code || 'INTERNAL_ERROR';
-  const message = status >= 500 ? 'Something went wrong' : normalized.message;
+  const safeMessage = code === 'DB_UNAVAILABLE' ? normalized.message : 'Something went wrong';
+  const message = status >= 500 ? safeMessage : normalized.message;
   if (status >= 500) {
     console.error(normalized);
   }

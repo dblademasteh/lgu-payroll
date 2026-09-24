@@ -27,14 +27,9 @@ export const PAYROLL_ROLES = [
   ROLES.PAYROLL_MANAGER,
 ];
 
-// Report generation roles
-export const REPORT_ROLES = [
-  ROLES.ADMIN,
-  ROLES.HR_MANAGER,
-  ROLES.PAYROLL_MANAGER,
-  ROLES.DEPARTMENT_HEAD,
-  ROLES.AUDITOR,
-];
+// Report generation roles — same set as oversight (whoever can oversee can
+// also read/produce reports). Aliased, not duplicated, to keep one source of truth.
+export const REPORT_ROLES = OVERSIGHT_ROLES;
 
 export const isOversight = (role) => OVERSIGHT_ROLES.includes(role);
 export const canManagePayroll = (role) => PAYROLL_ROLES.includes(role);

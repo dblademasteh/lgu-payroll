@@ -29,8 +29,22 @@
   --muted: #475569;
   --line: #e2e8f0;
   --grid: color-mix(in oklab, var(--line) 40%, transparent);
-  --shadow-sm: 0 1px 0 0 var(--line), 0 1px 2px rgb(15 23 42 / 0.04);
-  --shadow-lg: 0 8px 24px -12px rgb(15 23 42 / 0.18);
+
+  /* Data-dense dashboard spacing tokens */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* Shadow depths */
+  --shadow-sm: 0 1px 2px rgba(15 23 42 / 0.05);
+  --shadow-md: 0 4px 6px rgba(15 23 42 / 0.1);
+  --shadow-lg: 0 10px 15px rgba(15 23 42 / 0.1);
+  --shadow-xl: 0 20px 25px rgba(15 23 42 / 0.15);
+
   color-scheme: light;
 }
 
@@ -48,8 +62,22 @@
   --muted: #94a3b8;
   --line: #1e293b;
   --grid: color-mix(in oklab, var(--line) 40%, transparent);
-  --shadow-sm: 0 1px 0 0 var(--line), 0 1px 2px rgb(2 6 23 / 0.25);
-  --shadow-lg: 0 8px 24px -12px rgb(2 6 23 / 0.4);
+
+  /* Data-dense dashboard spacing tokens (same) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* Shadow depths (dark) */
+  --shadow-sm: 0 1px 2px rgba(0 0 0 / 0.2);
+  --shadow-md: 0 4px 6px rgba(0 0 0 / 0.25);
+  --shadow-lg: 0 10px 15px rgba(0 0 0 / 0.25);
+  --shadow-xl: 0 20px 25px rgba(0 0 0 / 0.3);
+
   color-scheme: dark;
 }
 
@@ -71,6 +99,15 @@
   --font-sans: var(--font-sans-fallback);
   --font-display: 'Sora Variable', 'Sora', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Spacing tokens */
+  --space-xs: var(--space-xs);
+  --space-sm: var(--space-sm);
+  --space-md: var(--space-md);
+  --space-lg: var(--space-lg);
+  --space-xl: var(--space-xl);
+  --space-2xl: var(--space-2xl);
+  --space-3xl: var(--space-3xl);
 }
 
 @layer base {
@@ -169,6 +206,15 @@
   }
   .btn-danger:hover { filter: brightness(1.08); }
 
+  /* Touch target utility - ensures minimum 44x44px */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   /* input — surface fill, 8px radius, accent focus ring */
   .input {
     width: 100%;
@@ -230,7 +276,7 @@
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 12px;
-    box-shadow: var(--shadow-sm), var(--shadow-lg);
+    box-shadow: var(--shadow-md), var(--shadow-xl);
     position: relative;
   }
   .card::after {
@@ -286,12 +332,12 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
-    padding: 0.625rem 0.75rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--line);
     box-shadow: 0 1px 0 0 var(--line);
   }
   .data-table tbody td {
-    padding: 0.625rem 0.75rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
   }
   .data-table tbody tr:nth-child(even) { background: color-mix(in oklab, var(--ink) 2%, transparent); }
@@ -300,6 +346,15 @@
   .data-table tbody tr[data-selectable='true'] { cursor: pointer; }
   .data-table tbody tr[data-selected='true'] {
     background: color-mix(in oklab, var(--accent) 10%, transparent);
+  }
+
+  /* Table action buttons - ensure touch targets and focus */
+  .data-table .btn-ghost {
+    padding: 0.375rem;
+  }
+  .data-table .btn-ghost:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 
   /* sidebar link — 200ms ease, accent-tinted active */
@@ -314,10 +369,15 @@
     color: var(--muted);
     text-decoration: none;
     transition: background-color 200ms ease, color 200ms ease;
+    cursor: pointer;
   }
   .sidebar-link:hover {
     background: color-mix(in oklab, var(--ink) 8%, transparent);
     color: var(--ink);
+  }
+  .sidebar-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .sidebar-link[aria-current='page'] {
     background: color-mix(in oklab, var(--accent) 15%, transparent);
@@ -329,7 +389,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: 60;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -344,7 +404,7 @@
     max-height: min(85vh, 48rem);
     display: flex;
     flex-direction: column;
-    box-shadow: 0 24px 64px -16px rgb(2 6 23 / 0.35);
+    box-shadow: var(--shadow-xl);
   }
   .modal-sm { max-width: 26rem; }
   .modal-md { max-width: 36rem; }
@@ -362,8 +422,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
+    width: 2.5rem;
+    height: 2.5rem;
     border-radius: 8px;
     border: none;
     background: none;
@@ -372,6 +432,10 @@
     transition: background-color 150ms ease, color 150ms ease;
   }
   .modal-close:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink); }
+  .modal-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .modal-body { padding: 1.25rem; overflow: auto; }
   .modal-foot {
     display: flex;
@@ -386,7 +450,7 @@
     position: fixed;
     right: 1rem;
     top: 1rem;
-    z-index: 60;
+    z-index: 70;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -430,6 +494,18 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  /* drawer — mobile nav slide-in (matches .toast timing, respects reduced motion) */
+  .drawer-panel { animation: drawer-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .drawer-backdrop { animation: drawer-backdrop 220ms ease; }
+  @keyframes drawer-in {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes drawer-backdrop {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
   /* tabs — underline tab strip */
   .tabbar {
     display: flex;
@@ -451,6 +527,11 @@
     transition: color 150ms ease, border-color 150ms ease;
   }
   .tab:hover { color: var(--ink); }
+  .tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    border-radius: 4px;
+  }
   .tab-active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
   /* header dropdown (notifications/user menu) */
@@ -465,7 +546,7 @@
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 12px;
-    box-shadow: 0 16px 48px -16px rgb(2 6 23 / 0.3);
+    box-shadow: var(--shadow-xl);
     overflow: hidden;
   }
   .dropdown-divider { height: 1px; background: var(--line); margin: 0.5rem 0; }
@@ -485,6 +566,11 @@
     transition: background-color 150ms ease;
   }
   .dropdown-item:hover { background: color-mix(in oklab, var(--accent) 8%, transparent); }
+  .dropdown-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: 4px;
+  }
   .dropdown-item[aria-current='true'],
   .dropdown-item.active {
     background: color-mix(in oklab, var(--accent) 15%, transparent);

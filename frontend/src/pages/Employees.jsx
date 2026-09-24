@@ -1,52 +1,199 @@
-import { useState } from 'react';
-import { Plus, Search, Filter, Edit, Trash2, UserPlus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Filter, Edit, Trash2, UserPlus, Loader2, Save, RotateCcw } from 'lucide-react';
 import { useToast } from '../hooks/useToast.jsx';
+import Modal from '../components/Modal.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import Badge from '../components/Badge.jsx';
+import EmptyState from '../components/EmptyState.jsx';
+import Pagination from '../components/Pagination.jsx';
+import { getEmployees, getEmployeeDepartments, createEmployee, updateEmployee, deleteEmployee } from '../api/employees.js';
+import { formatCurrency } from '../lib/format.js';
+import { getStatusTone } from '../lib/tones.js';
 
 export default function Employees() {
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [loading, setLoading] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [formData, setFormData] = useState({
+    employeeNumber: '',
+    firstName: '',
+    lastName: '',
+    middleName: '',
+    email: '',
+    department: '',
+    position: '',
+    hiredDate: '',
+    monthlySalary: '',
+    status: 'ACTIVE',
+  });
+  const [formErrors, setFormErrors] = useState({});
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
-  const departments = ['Admin', 'HR', 'Engineering', 'Finance', 'Operations', 'Legal'];
-  const positions = ['Administrative Aide', 'HR Specialist', 'Software Engineer', 'Accountant', 'Operations Officer', 'Attorney'];
+  // Load departments for filter and form
+  useEffect(() => {
+    async function loadDepartments() {
+      try {
+        const res = await getEmployeeDepartments();
+        setDepartments(res.data || []);
+      } catch (e) {
+        console.error('Failed to load departments:', e);
+      }
+    }
+    loadDepartments();
+  }, []);
 
-  const employees = [
-    { id: '1', employeeNo: 'EMP-001', firstName: 'Juan', lastName: 'Dela Cruz', middleName: 'Santos', email: 'juan.delacruz@lgu.gov.ph', department: 'Admin', position: 'Administrative Officer', hiredDate: '2020-01-15', monthlySalary: '25000', status: 'ACTIVE' },
-    { id: '2', employeeNo: 'EMP-002', firstName: 'Maria', lastName: 'Santos', middleName: 'Reyes', email: 'maria.santos@lgu.gov.ph', department: 'HR', position: 'HR Specialist', hiredDate: '2021-03-22', monthlySalary: '30000', status: 'ACTIVE' },
-    { id: '3', employeeNo: 'EMP-003', firstName: 'Pedro', lastName: 'Garcia', middleName: 'Lopez', email: 'pedro.garcia@lgu.gov.ph', department: 'Engineering', position: 'Software Engineer', hiredDate: '2022-06-10', monthlySalary: '35000', status: 'ACTIVE' },
-    { id: '4', employeeNo: 'EMP-004', firstName: 'Ana', lastName: 'Reyes', middleName: 'Cruz', email: 'ana.reyes@lgu.gov.ph', department: 'Finance', position: 'Accountant', hiredDate: '2019-11-05', monthlySalary: '28000', status: 'ACTIVE' },
-    { id: '5', employeeNo: 'EMP-005', firstName: 'Jose', lastName: 'Mendoza', middleName: 'Torres', email: 'jose.mendoza@lgu.gov.ph', department: 'Operations', position: 'Operations Officer', hiredDate: '2023-02-14', monthlySalary: '22000', status: 'ACTIVE' },
-    { id: '6', employeeNo: 'EMP-006', firstName: 'Luisa', lastName: 'Fernandez', middleName: 'Garcia', email: 'luisa.fernandez@lgu.gov.ph', department: 'Legal', position: 'Attorney', hiredDate: '2018-08-20', monthlySalary: '40000', status: 'INACTIVE' },
-  ];
+  // Load employees
+  useEffect(() => {
+    loadEmployees();
+  }, [pagination.page, deptFilter, statusFilter]);
+
+  async function loadEmployees() {
+    setLoading(true);
+    try {
+      const params = { page: pagination.page, limit: pagination.limit };
+      if (deptFilter && deptFilter !== 'all') params.department = deptFilter;
+      if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+
+      const res = await getEmployees(params);
+      setEmployees(res.data || []);
+      setPagination(res.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 });
+    } catch (e) {
+      console.error('Failed to load employees:', e);
+      toast('Failed to load employees', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const filteredEmployees = employees.filter((e) => {
     const matchesSearch = `${e.firstName} ${e.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-      e.employeeNo.toLowerCase().includes(search.toLowerCase());
-    const matchesDept = deptFilter === 'all' || e.department === deptFilter;
-    const matchesStatus = statusFilter === 'all' || e.status === statusFilter;
-    return matchesSearch && matchesDept && matchesStatus;
+      e.employeeNumber.toLowerCase().includes(search.toLowerCase());
+    return matchesSearch;
   });
 
-  const handleAdd = () => {
+  function handleAdd() {
     setEditing(null);
+    setFormData({
+      employeeNumber: '',
+      firstName: '',
+      lastName: '',
+      middleName: '',
+      email: '',
+      department: '',
+      position: '',
+      hiredDate: new Date().toISOString().slice(0, 10),
+      monthlySalary: '',
+      status: 'ACTIVE',
+    });
+    setFormErrors({});
     setShowModal(true);
-  };
+  }
 
-  const handleEdit = (emp) => {
+  function handleEdit(emp) {
     setEditing(emp);
+    setFormData({
+      employeeNumber: emp.employeeNumber,
+      firstName: emp.firstName,
+      lastName: emp.lastName,
+      middleName: emp.middleName || '',
+      email: emp.email || '',
+      department: emp.department || '',
+      position: emp.position || '',
+      hiredDate: emp.hiredDate ? new Date(emp.hiredDate).toISOString().slice(0, 10) : '',
+      monthlySalary: String(emp.monthlySalary),
+      status: emp.status,
+    });
+    setFormErrors({});
     setShowModal(true);
-  };
+  }
 
-  const handleDelete = (emp) => {
-    toast(`Delete ${emp.firstName} ${emp.lastName} - to be implemented`, 'info');
-  };
+  function validateForm() {
+    const errors = {};
+    if (!formData.employeeNumber.trim()) errors.employeeNumber = 'Employee number is required';
+    if (!formData.firstName.trim()) errors.firstName = 'First name is required';
+    if (!formData.lastName.trim()) errors.lastName = 'Last name is required';
+    if (!formData.email.trim()) errors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errors.email = 'Invalid email format';
+    if (!formData.hiredDate) errors.hiredDate = 'Hired date is required';
+    if (!formData.monthlySalary || Number(formData.monthlySalary) < 0) errors.monthlySalary = 'Valid salary is required';
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
-  const handleSave = () => {
-    toast(editing ? 'Update employee - to be implemented' : 'Create employee - to be implemented', 'info');
-    setShowModal(false);
+  async function handleSave(e) {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    setSaveLoading(true);
+    try {
+      const payload = {
+        employeeNumber: formData.employeeNumber.trim(),
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        middleName: formData.middleName.trim() || null,
+        email: formData.email.trim() || null,
+        department: formData.department || null,
+        position: formData.position || null,
+        hiredDate: formData.hiredDate,
+        monthlySalary: Number(formData.monthlySalary),
+        status: formData.status,
+      };
+
+      if (editing) {
+        await updateEmployee(editing.id, payload);
+        toast('Employee updated', 'success');
+      } else {
+        await createEmployee(payload);
+        toast('Employee created', 'success');
+      }
+      setShowModal(false);
+      loadEmployees();
+    } catch (e) {
+      const msg = e?.response?.data?.error?.message || (editing ? 'Failed to update employee' : 'Failed to create employee');
+      toast(msg, 'error');
+      if (e?.response?.data?.error?.code === 'DUPLICATE') {
+        setFormErrors({ employeeNumber: 'An employee with this number already exists' });
+      }
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
+  async function handleDelete(emp) {
+    setDeleteLoading(emp.id);
+    try {
+      await deleteEmployee(emp.id);
+      toast('Employee deleted (soft delete)', 'success');
+      loadEmployees();
+    } catch (e) {
+      const msg = e?.response?.data?.error?.message || 'Failed to delete employee';
+      toast(msg, 'error');
+    } finally {
+      setDeleteLoading(null);
+      setConfirmDelete(null);
+    }
+  }
+
+  async function handleRehire(emp) {
+    // Rehire is done by updating status to ACTIVE and clearing deletedAt
+    // For now, we'll just show info - the backend handles revival on re-creation with same employeeNumber
+    toast('Rehire: Create a new employee with the same employee number to revive', 'info');
+  }
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (formErrors[field]) {
+      setFormErrors(prev => ({ ...prev, [field]: null }));
+    }
   };
 
   return (
@@ -75,11 +222,19 @@ export default function Employees() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="text-muted" size={16} aria-hidden="true" />
-            <select className="select pr-8" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
+            <select
+              className="select pr-8"
+              value={deptFilter}
+              onChange={(e) => { setDeptFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+            >
               <option value="all">All Departments</option>
-              {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+              {departments.map((d) => <option key={d.name} value={d.name}>{d.name} ({d.count})</option>)}
             </select>
-            <select className="select pr-8" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <select
+              className="select pr-8"
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+            >
               <option value="all">All Statuses</option>
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
@@ -87,8 +242,7 @@ export default function Employees() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="data-table">
+        <table className="data-table min-w-[800px]">
             <thead>
               <tr>
                 <th>Employee No.</th>
@@ -99,29 +253,78 @@ export default function Employees() {
                 <th>Hired</th>
                 <th>Monthly Salary</th>
                 <th>Status</th>
-                <th className="w-[100px]">Actions</th>
+                <th className="w-[120px]">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredEmployees.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-muted">No employees found</td>
+                  <td colSpan={9} className="text-center py-12">
+                    <div className="flex items-center justify-center gap-2 text-muted">
+                      <Loader2 size={20} className="animate-spin" />
+                      <span>Loading...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredEmployees.length === 0 ? (
+                <tr>
+                  <td colSpan={9}>
+                    <EmptyState title="No employees found" />
+                  </td>
                 </tr>
               ) : (
                 filteredEmployees.map((e) => (
                   <tr key={e.id} data-selectable="true">
-                    <td className="font-mono text-sm">{e.employeeNo}</td>
-                    <td className="font-medium text-ink">{e.firstName} {e.middleName ? e.middleName[0] + '. ' : ''}{e.lastName}</td>
-                    <td className="text-sm">{e.email}</td>
-                    <td>{e.department}</td>
-                    <td className="text-sm">{e.position}</td>
-                    <td className="font-mono text-sm">{e.hiredDate}</td>
-                    <td className="font-mono">₱{Number(e.monthlySalary).toLocaleString()}</td>
-                    <td><span className={`badge ${e.status === 'ACTIVE' ? 'badge-success' : 'badge-muted'}`}>{e.status}</span></td>
+                    <td className="font-mono text-sm">{e.employeeNumber}</td>
+                    <td className="font-medium text-ink">
+                      {e.firstName} {e.middleName ? e.middleName[0] + '. ' : ''}{e.lastName}
+                    </td>
+                    <td className="text-sm">{e.email || '—'}</td>
+                    <td>{e.department || '—'}</td>
+                    <td className="text-sm">{e.position || '—'}</td>
+                    <td className="font-mono text-sm">{e.hiredDate ? new Date(e.hiredDate).toLocaleDateString() : '—'}</td>
+                    <td className="font-mono">{formatCurrency(e.monthlySalary)}</td>
+                    <td><Badge tone={getStatusTone(e.status, 'employee')}>{e.status}</Badge></td>
                     <td>
                       <div className="flex items-center gap-1">
-                        <button type="button" className="btn btn-ghost p-1.5" onClick={() => handleEdit(e)} title="Edit"><Edit size={14} aria-hidden="true" /></button>
-                        <button type="button" className="btn btn-ghost p-1.5 text-error" onClick={() => handleDelete(e)} title="Delete"><Trash2 size={14} aria-hidden="true" /></button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost p-1.5"
+                          onClick={() => handleEdit(e)}
+                          title="Edit"
+                          disabled={deleteLoading === e.id}
+                        >
+                          <Edit size={14} aria-hidden="true" />
+                        </button>
+                        {e.status === 'INACTIVE' && !e.deletedAt ? (
+                          <button
+                            type="button"
+                            className="btn btn-accent btn-sm px-2 py-1.5 text-xs"
+                            onClick={() => handleRehire(e)}
+                            title="Rehire/Revive"
+                          >
+                            <RotateCcw size={12} aria-hidden="true" /> Revive
+                          </button>
+                        ) : e.deletedAt ? (
+                          <button
+                            type="button"
+                            className="btn btn-accent btn-sm px-2 py-1.5 text-xs"
+                            onClick={() => handleRehire(e)}
+                            title="Revive deleted employee"
+                          >
+                            <RotateCcw size={12} aria-hidden="true" /> Revive
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost p-1.5 text-error"
+                            onClick={() => setConfirmDelete(e)}
+                            title="Delete (Soft)"
+                            disabled={deleteLoading === e.id}
+                          >
+                            {deleteLoading === e.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} aria-hidden="true" />}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -129,78 +332,173 @@ export default function Employees() {
               )}
             </tbody>
           </table>
-        </div>
+
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          total={pagination.total}
+          loading={loading}
+          onPageChange={(page) => setPagination(p => ({ ...p, page }))}
+        />
       </div>
 
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-box modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>{editing ? 'Edit Employee' : 'Add Employee'}</h3>
-              <button type="button" className="modal-close" onClick={() => setShowModal(false)} aria-label="Close">✕</button>
+      {/* Add/Edit Employee Modal */}
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editing ? 'Edit Employee' : 'Add Employee'}
+        size="lg"
+        footer={
+          <>
+            <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)} disabled={saveLoading}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saveLoading}>
+              {saveLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} aria-hidden="true" />}
+              {editing ? 'Update' : 'Create'}
+            </button>
+          </>
+        }
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="mono-label">Employee No. <span className="text-error">*</span></label>
+              <input
+                type="text"
+                className={`input mt-1.5 ${formErrors.employeeNumber ? 'input-error' : ''}`}
+                placeholder="e.g., EMP-007"
+                value={formData.employeeNumber}
+                onChange={(e) => handleInputChange('employeeNumber', e.target.value)}
+                required
+                maxLength={50}
+                disabled={editing}
+              />
+              {formErrors.employeeNumber && <p className="text-xs text-error mt-1">{formErrors.employeeNumber}</p>}
             </div>
-            <div className="modal-body">
-              <form className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="mono-label">Employee No.</label>
-                    <input type="text" className="input mt-1.5" defaultValue={editing?.employeeNo ?? ''} required />
-                  </div>
-                  <div>
-                    <label className="mono-label">First Name</label>
-                    <input type="text" className="input mt-1.5" defaultValue={editing?.firstName ?? ''} required />
-                  </div>
-                  <div>
-                    <label className="mono-label">Last Name</label>
-                    <input type="text" className="input mt-1.5" defaultValue={editing?.lastName ?? ''} required />
-                  </div>
-                  <div>
-                    <label className="mono-label">Middle Name</label>
-                    <input type="text" className="input mt-1.5" defaultValue={editing?.middleName ?? ''} />
-                  </div>
-                  <div>
-                    <label className="mono-label">Email</label>
-                    <input type="email" className="input mt-1.5" defaultValue={editing?.email ?? ''} required />
-                  </div>
-                  <div>
-                    <label className="mono-label">Department</label>
-                    <select className="select mt-1.5" defaultValue={editing?.department ?? ''}>
-                      <option value="">Select department</option>
-                      {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mono-label">Position</label>
-                    <select className="select mt-1.5" defaultValue={editing?.position ?? ''}>
-                      <option value="">Select position</option>
-                      {positions.map((p) => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mono-label">Hired Date</label>
-                    <input type="date" className="input mt-1.5" defaultValue={editing?.hiredDate ?? ''} required />
-                  </div>
-                  <div>
-                    <label className="mono-label">Monthly Salary</label>
-                    <input type="number" className="input mt-1.5" defaultValue={editing?.monthlySalary ?? ''} step="0.01" min="0" required />
-                  </div>
-                  <div>
-                    <label className="mono-label">Status</label>
-                    <select className="select mt-1.5" defaultValue={editing?.status ?? 'ACTIVE'}>
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                  </div>
-                </div>
-              </form>
+            <div>
+              <label className="mono-label">First Name <span className="text-error">*</span></label>
+              <input
+                type="text"
+                className={`input mt-1.5 ${formErrors.firstName ? 'input-error' : ''}`}
+                placeholder="Juan"
+                value={formData.firstName}
+                onChange={(e) => handleInputChange('firstName', e.target.value)}
+                required
+                maxLength={100}
+              />
+              {formErrors.firstName && <p className="text-xs text-error mt-1">{formErrors.firstName}</p>}
             </div>
-            <div className="modal-foot">
-              <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button type="button" className="btn btn-primary" onClick={handleSave}>{editing ? 'Update' : 'Create'}</button>
+            <div>
+              <label className="mono-label">Last Name <span className="text-error">*</span></label>
+              <input
+                type="text"
+                className={`input mt-1.5 ${formErrors.lastName ? 'input-error' : ''}`}
+                placeholder="Dela Cruz"
+                value={formData.lastName}
+                onChange={(e) => handleInputChange('lastName', e.target.value)}
+                required
+                maxLength={100}
+              />
+              {formErrors.lastName && <p className="text-xs text-error mt-1">{formErrors.lastName}</p>}
+            </div>
+            <div>
+              <label className="mono-label">Middle Name</label>
+              <input
+                type="text"
+                className="input mt-1.5"
+                placeholder="Santos"
+                value={formData.middleName}
+                onChange={(e) => handleInputChange('middleName', e.target.value)}
+                maxLength={100}
+              />
+            </div>
+            <div>
+              <label className="mono-label">Email <span className="text-error">*</span></label>
+              <input
+                type="email"
+                className={`input mt-1.5 ${formErrors.email ? 'input-error' : ''}`}
+                placeholder="juan.delacruz@lgu.gov.ph"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                required
+                maxLength={255}
+              />
+              {formErrors.email && <p className="text-xs text-error mt-1">{formErrors.email}</p>}
+            </div>
+            <div>
+              <label className="mono-label">Department</label>
+              <select
+                className="select mt-1.5"
+                value={formData.department}
+                onChange={(e) => handleInputChange('department', e.target.value)}
+              >
+                <option value="">Select department</option>
+                {departments.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mono-label">Position</label>
+              <input
+                type="text"
+                className="input mt-1.5"
+                placeholder="Administrative Officer"
+                value={formData.position}
+                onChange={(e) => handleInputChange('position', e.target.value)}
+                maxLength={100}
+              />
+            </div>
+            <div>
+              <label className="mono-label">Hired Date <span className="text-error">*</span></label>
+              <input
+                type="date"
+                className={`input mt-1.5 ${formErrors.hiredDate ? 'input-error' : ''}`}
+                value={formData.hiredDate}
+                onChange={(e) => handleInputChange('hiredDate', e.target.value)}
+                required
+                max={new Date().toISOString().slice(0, 10)}
+              />
+              {formErrors.hiredDate && <p className="text-xs text-error mt-1">{formErrors.hiredDate}</p>}
+            </div>
+            <div>
+              <label className="mono-label">Monthly Salary <span className="text-error">*</span></label>
+              <input
+                type="number"
+                className={`input mt-1.5 ${formErrors.monthlySalary ? 'input-error' : ''}`}
+                placeholder="25000"
+                value={formData.monthlySalary}
+                onChange={(e) => handleInputChange('monthlySalary', e.target.value)}
+                step="0.01"
+                min="0"
+                required
+              />
+              {formErrors.monthlySalary && <p className="text-xs text-error mt-1">{formErrors.monthlySalary}</p>}
+            </div>
+            <div>
+              <label className="mono-label">Status</label>
+              <select
+                className="select mt-1.5"
+                value={formData.status}
+                onChange={(e) => handleInputChange('status', e.target.value)}
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
             </div>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => handleDelete(confirmDelete)}
+        title="Delete employee"
+        message={confirmDelete ? `Delete "${confirmDelete.firstName} ${confirmDelete.lastName}"? This will soft-delete the record (can be revived later).` : ''}
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   );
 }

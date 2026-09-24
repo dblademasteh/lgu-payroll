@@ -2,15 +2,16 @@ import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { validate, validateQuery } from '../middleware/validate.js';
+import { validate } from '../middleware/validate.js';
 import { payrollRunCreateSchema, payrollRunUpdateSchema, payrollRunParamsSchema, payrollRunQuerySchema } from '../shared/contracts/payroll.js';
 import { AppError } from '../lib/errors.js';
+import { computeWithholdingTax, computeTaxableIncome, computeTableDeduction } from '../lib/tax.js';
 
 const router = express.Router();
 
 router.use(requireAuth);
 
-router.get('/', validateQuery(payrollRunQuerySchema), async (req, res, next) => {
+router.get('/', validate(payrollRunQuerySchema), async (req, res, next) => {
   try {
     const { status, page, limit } = req.query;
     const where = status && status !== 'all' ? { status } : {};
@@ -84,6 +85,12 @@ router.post('/:id/process', requireRole('ADMIN', 'HR_MANAGER', 'PAYROLL_MANAGER'
       include: { payrollRecords: { where: { payrollRunId: id } } },
     });
 
+    // Get overtime/allowances for this payroll run
+    const overtimeAllowances = await prisma.overtimeAllowance.findMany({
+      where: { payrollRunId: id },
+    });
+    const overtimeMap = new Map(overtimeAllowances.map(o => [o.employeeId, o]));
+
     // Get active deductions
     const deductions = await prisma.deduction.findMany({ where: { isActive: true } });
 
@@ -91,20 +98,33 @@ router.post('/:id/process', requireRole('ADMIN', 'HR_MANAGER', 'PAYROLL_MANAGER'
     const records = [];
     for (const emp of employees) {
       const basicSalary = Number(emp.monthlySalary);
-      const grossPay = basicSalary; // Simplified - add overtime/allowances later
-      const taxableIncome = grossPay; // Simplified
-      let totalDeductions = 0;
+      
+      // Get overtime/allowances for this employee
+      const overtime = overtimeMap.get(emp.id);
+      const overtimePay = overtime ? Number(overtime.overtimePay) : 0;
+      const allowances = overtime ? Number(overtime.allowances) : 0;
+      
+      const grossPay = basicSalary + overtimePay + allowances;
+      let nonTaxDeductions = 0;
       const details = [];
 
+      // First pass: compute non-tax deductions (FIXED, PERCENTAGE)
       for (const ded of deductions) {
         let computed = 0;
         if (ded.amountType === 'FIXED') {
           computed = Number(ded.rateOrAmount);
         } else if (ded.amountType === 'PERCENTAGE') {
-          const basis = ded.basis === 'GROSS' ? grossPay : (ded.basis === 'TAXABLE' ? taxableIncome : grossPay - totalDeductions);
+          // For percentage deductions, basis can be GROSS, TAXABLE, or NET
+          // Note: TAXABLE basis needs pre-tax deductions computed first
+          // For now, we use grossPay as basis for government deductions
+          const basis = ded.basis === 'GROSS' ? grossPay : 
+                        (ded.basis === 'TAXABLE' ? grossPay : grossPay - nonTaxDeductions);
           computed = basis * Number(ded.rateOrAmount) / 100;
+        } else if (ded.amountType === 'TABLE') {
+          // Skip TABLE type in first pass - compute after non-tax deductions
+          continue;
         }
-        totalDeductions += computed;
+        nonTaxDeductions += computed;
         details.push({
           deductionId: ded.id,
           type: ded.type,
@@ -117,8 +137,55 @@ router.post('/:id/process', requireRole('ADMIN', 'HR_MANAGER', 'PAYROLL_MANAGER'
         });
       }
 
-      const withholdingTax = 0; // Simplified - implement BIR tax table
-      const netPay = grossPay - totalDeductions - withholdingTax;
+      // Add overtime and allowances as earnings details
+      if (overtimePay > 0) {
+        details.push({
+          deductionId: null,
+          type: 'OTHER',
+          name: `Overtime Pay (${overtime?.overtimeHours || 0} hrs @ ${overtime?.overtimeRate || 0}x)`,
+          amountType: 'FIXED',
+          basis: 'GROSS',
+          rateOrAmount: overtimePay.toFixed(2),
+          computedAmount: overtimePay.toFixed(2),
+          isMandatory: false,
+        });
+      }
+      if (allowances > 0) {
+        details.push({
+          deductionId: null,
+          type: 'OTHER',
+          name: 'Allowances',
+          amountType: 'FIXED',
+          basis: 'GROSS',
+          rateOrAmount: allowances.toFixed(2),
+          computedAmount: allowances.toFixed(2),
+          isMandatory: false,
+        });
+      }
+
+      // Compute taxable income after non-tax deductions
+      const taxableIncome = computeTaxableIncome(grossPay, nonTaxDeductions);
+      
+      // Second pass: compute TABLE type deductions (withholding tax)
+      for (const ded of deductions) {
+        if (ded.amountType === 'TABLE') {
+          const computed = computeTableDeduction({ grossPay, totalDeductions: nonTaxDeductions });
+          details.push({
+            deductionId: ded.id,
+            type: ded.type,
+            name: ded.name,
+            amountType: ded.amountType,
+            basis: ded.basis,
+            rateOrAmount: ded.rateOrAmount,
+            computedAmount: computed.toFixed(2),
+            isMandatory: ded.isMandatory,
+          });
+        }
+      }
+
+      const withholdingTax = computeWithholdingTax(taxableIncome);
+      const totalDeductions = nonTaxDeductions + withholdingTax;
+      const netPay = grossPay - totalDeductions;
 
       const record = await prisma.payrollRecord.upsert({
         where: { payrollRunId_employeeId: { payrollRunId: id, employeeId: emp.id } },

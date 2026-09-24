@@ -9,58 +9,22 @@ export function validate(schema) {
         query: req.query,
         params: req.params,
       });
-      req.body = parsed.body ?? req.body;
-      req.query = parsed.query ?? req.query;
-      req.params = parsed.params ?? req.params;
-      next();
-    } catch (e) {
-      if (e instanceof ZodError) {
-        const messages = e.errors.map((err) => `${err.path.join('.')}: ${err.message}`).join('; ');
-        throw new AppError(messages, 400, 'VALIDATION_ERROR');
+      if (parsed.body !== undefined) req.body = parsed.body;
+      if (parsed.query !== undefined) {
+        // Express 5 req.query is a getter — assignment throws; defineProperty.
+        Object.defineProperty(req, 'query', {
+          value: parsed.query,
+          writable: true,
+          configurable: true,
+          enumerable: true,
+        });
       }
-      throw e;
-    }
-  };
-}
-
-export function validateBody(schema) {
-  return (req, res, next) => {
-    try {
-      req.body = schema.parse(req.body);
+      if (parsed.params !== undefined) req.params = parsed.params;
       next();
     } catch (e) {
       if (e instanceof ZodError) {
-        const messages = e.errors.map((err) => `${err.path.join('.')}: ${err.message}`).join('; ');
-        throw new AppError(messages, 400, 'VALIDATION_ERROR');
-      }
-      throw e;
-    }
-  };
-}
-
-export function validateQuery(schema) {
-  return (req, res, next) => {
-    try {
-      req.query = schema.parse(req.query);
-      next();
-    } catch (e) {
-      if (e instanceof ZodError) {
-        const messages = e.errors.map((err) => `${err.path.join('.')}: ${err.message}`).join('; ');
-        throw new AppError(messages, 400, 'VALIDATION_ERROR');
-      }
-      throw e;
-    }
-  };
-}
-
-export function validateParams(schema) {
-  return (req, res, next) => {
-    try {
-      req.params = schema.parse(req.params);
-      next();
-    } catch (e) {
-      if (e instanceof ZodError) {
-        const messages = e.errors.map((err) => `${err.path.join('.')}: ${err.message}`).join('; ');
+        const issues = e.issues || e.errors || [];
+        const messages = issues.map((err) => `${err.path.join('.')}: ${err.message}`).join('; ');
         throw new AppError(messages, 400, 'VALIDATION_ERROR');
       }
       throw e;

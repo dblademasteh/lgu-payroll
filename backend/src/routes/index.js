@@ -2,6 +2,7 @@ import express from 'express';
 import authRoutes from './auth.js';
 import employeeRoutes from './employees.js';
 import payrollRoutes from './payroll.js';
+import payrollChangesRoutes from './payrollChanges.js';
 import deductionRoutes from './deductions.js';
 import departmentRoutes from './departments.js';
 import payslipRoutes from './payslips.js';
@@ -10,11 +11,13 @@ import leaveRoutes from './leave.js';
 import settingsRoutes from './settings.js';
 import apiKeyRoutes from './apiKeys.js';
 import syncRoutes from './sync.js';
+import overtimeRoutes from './overtime.js';
 
 const router = express.Router();
 
 router.use('/auth', authRoutes);
 router.use('/employees', employeeRoutes);
+router.use('/payroll/changes', payrollChangesRoutes);
 router.use('/payroll', payrollRoutes);
 router.use('/deductions', deductionRoutes);
 router.use('/departments', departmentRoutes);
@@ -24,5 +27,6 @@ router.use('/leave', leaveRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/api-keys', apiKeyRoutes);
 router.use('/sync', syncRoutes);
+router.use('/overtime', overtimeRoutes);
 
 export default router;

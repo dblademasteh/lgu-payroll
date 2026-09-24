@@ -17,6 +17,7 @@
 ## Purpose & Integration
 - Payroll management & reporting system; shares stack with LGU-HRMS/LGU-Attendance (Express 5, React 19, Vite 5, Tailwind 4, Prisma/PostgreSQL 16)
 - **Optional** HRMS/Attendance integration: same webhook + polling pattern as Attendance; HRMS pushes `employee.*` + `leave.*`, Attendance pulls punches via external API; configured in Settings > Integration (AES-GCM encrypted secrets, hot-reload via `getHrmsConfig()`)
+- **Payroll supplies data to HRMS**: `POST /api/v1/payroll/changes` (Bearer API key, scope `payroll:read`, mounted before JWT-gated `/payroll`) is pulled by HRMS `payrollAdapter.sync()` with `{ since }` and returns `{records:[{entity,action,payload}]}` events (`period`/`run`/`record` ids in `externalId`, source statuses DRAFT|PROCESSING|APPROVED|COMPLETED, CANCELLED omitted). Service: `services/payrollChangesService.js`; HRMS upserts `PayrollPeriod` (by name) → `PayrollRun` (by externalId) → `PayrollItem`/`Payslip` (by externalId) keyed to HRMS employees by `employeeNumber`.
 - Standalone by default: seed provides full demo dataset (employees, departments, deductions, holidays) — works offline
 
 ## Architecture

@@ -8,6 +8,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Dev on localhost previously kept a stale SW shell alive and served dead builds.
+      // Keep the SW out of the dev server entirely; it is only injected into production builds.
+      devOptions: { enabled: false },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'LGU Payroll',

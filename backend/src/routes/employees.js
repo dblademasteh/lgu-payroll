@@ -2,7 +2,7 @@ import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { validate, validateQuery } from '../middleware/validate.js';
+import { validate } from '../middleware/validate.js';
 import { employeeCreateSchema, employeeUpdateSchema, employeeParamsSchema, employeeQuerySchema } from '../shared/contracts/employees.js';
 import { AppError } from '../lib/errors.js';
 
@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-router.get('/', validateQuery(employeeQuerySchema), async (req, res, next) => {
+router.get('/', validate(employeeQuerySchema), async (req, res, next) => {
   try {
     const { search, department, status, page, limit } = req.query;
     const where = {};

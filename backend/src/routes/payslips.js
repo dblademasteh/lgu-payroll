@@ -2,14 +2,15 @@ import express from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { validate, validateQuery } from '../middleware/validate.js';
+import { validate } from '../middleware/validate.js';
 import { AppError } from '../lib/errors.js';
+import { generatePayslipPDF } from '../lib/pdf.js';
 
 const router = express.Router();
 
 router.use(requireAuth);
 
-router.get('/', validateQuery(z.object({ query: z.object({ runId: z.string().uuid().optional(), employeeId: z.string().uuid().optional(), status: z.enum(['PENDING', 'GENERATED', 'DISTRIBUTED', 'CANCELLED', 'all']).default('all'), page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().positive().max(100).default(20) }) })), async (req, res, next) => {
+router.get('/', validate(z.object({ query: z.object({ runId: z.string().uuid().optional(), employeeId: z.string().uuid().optional(), status: z.enum(['PENDING', 'GENERATED', 'DISTRIBUTED', 'CANCELLED', 'all']).default('all'), page: z.coerce.number().int().positive().default(1), limit: z.coerce.number().int().positive().max(100).default(20) }) })), async (req, res, next) => {
   try {
     const { runId, employeeId, status, page, limit } = req.query;
     const where = {};
@@ -40,6 +41,29 @@ router.get('/:id', validate(z.object({ params: z.object({ id: z.string().uuid() 
     });
     if (!payslip) throw new AppError('Payslip not found', 404, 'NOT_FOUND');
     res.json({ data: payslip });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/:id/pdf', validate(z.object({ params: z.object({ id: z.string().uuid() }) })), async (req, res, next) => {
+  try {
+    const payslip = await prisma.payslip.findUnique({
+      where: { id: req.params.id },
+      include: { employee: true, payrollRun: true, payrollRecord: { include: { details: true } } },
+    });
+    if (!payslip) throw new AppError('Payslip not found', 404, 'NOT_FOUND');
+    
+    const pdfBuffer = await generatePayslipPDF({
+      employee: payslip.employee,
+      payrollRun: payslip.payrollRun,
+      payrollRecord: payslip.payrollRecord,
+    });
+    
+    const filename = `payslip-${payslip.employee?.employeeNumber}-${payslip.payrollRun?.period}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
   } catch (e) {
     next(e);
   }
